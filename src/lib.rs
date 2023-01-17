@@ -28,6 +28,9 @@ pub struct SensorData {
 
     /// If the last recorded temperature is higher than this, the sensor is put in an alarm state
     pub alarm_temp_high: i8,
+
+    /// Raw temperature value from scratchpad
+    pub raw_temp: u16,
 }
 
 pub struct Ds18b20 {
@@ -180,7 +183,10 @@ where
     Ok(scratchpad)
 }
 
+
+// private to pub
 fn read_data<T, E>(
+//pub fn read_data<T, E>(
     address: &Address,
     onewire: &mut OneWire<T>,
     delay: &mut impl DelayUs<u16>,
@@ -208,6 +214,7 @@ where
         resolution,
         alarm_temp_high: i8::from_le_bytes([scratchpad[2]]),
         alarm_temp_low: i8::from_le_bytes([scratchpad[3]]),
+        raw_temp,
     })
 }
 
