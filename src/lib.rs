@@ -29,8 +29,11 @@ pub struct SensorData {
     /// If the last recorded temperature is higher than this, the sensor is put in an alarm state
     pub alarm_temp_high: i8,
 
-    /// Raw temperature value from scratchpad
+    /// Raw temperature after positive/negative verification
     pub raw_temp: u16,
+
+    /// Scratchpad
+    pub scratchpad: [u8; 9],
 }
 
 pub struct Ds18b20 {
@@ -184,9 +187,7 @@ where
 }
 
 
-// private to pub
 fn read_data<T, E>(
-//pub fn read_data<T, E>(
     address: &Address,
     onewire: &mut OneWire<T>,
     delay: &mut impl DelayUs<u16>,
@@ -202,19 +203,19 @@ where
     } else {
         return Err(OneWireError::CrcMismatch);
     };
-    let raw_temp = u16::from_le_bytes([scratchpad[0], scratchpad[1]]);
-    let temperature = match resolution {
-        Resolution::Bits12 => (raw_temp as f32) / 16.0,
-        Resolution::Bits11 => (raw_temp as f32) / 8.0,
-        Resolution::Bits10 => (raw_temp as f32) / 4.0,
-        Resolution::Bits9 => (raw_temp as f32) / 2.0,
-    };
+
+    let (raw_temp, temperature): (u16, f32) = verify_sign(
+        u16::from_le_bytes([scratchpad[0], scratchpad[1]]),
+        resolution,
+    );
+    
     Ok(SensorData {
         temperature,
         resolution,
         alarm_temp_high: i8::from_le_bytes([scratchpad[2]]),
         alarm_temp_low: i8::from_le_bytes([scratchpad[3]]),
-        raw_temp,
+        raw_temp, 
+        scratchpad,
     })
 }
 
@@ -251,4 +252,76 @@ where
     onewire.send_command(commands::COPY_SCRATCHPAD, address, delay)?;
     delay.delay_us(10000); // delay 10ms for the write to complete
     Ok(())
+}
+
+
+//
+fn verify_sign(raw_temp: u16,
+               resolution: Resolution) -> (u16, f32) {
+
+    let (sign, raw_temp): (f32, u16) = if (raw_temp & 0x8000).eq(&0x8000) {
+        (-1.0, (raw_temp ^ 0xFFFF) + 1)
+    } else {
+        (1.0, raw_temp)
+    };
+    
+    let temperature = match resolution {
+        Resolution::Bits12 => (raw_temp as f32) / 16.0,
+        Resolution::Bits11 => (raw_temp as f32) / 8.0,
+        Resolution::Bits10 => (raw_temp as f32) / 4.0,
+        Resolution::Bits9 => (raw_temp as f32) / 2.0,
+    };
+
+    (raw_temp, sign * temperature)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn negative_value() {
+        assert_eq!(verify_sign(0b1111_1111_1111_1000, Resolution::Bits12),
+                   (0b0000_0000_0000_1000, -0.5),
+        );
+        
+        assert_eq!(verify_sign(0b1111_1110_0110_1111, Resolution::Bits12),
+                   (0b110010001, -25.0625),
+        );
+
+        assert_eq!(verify_sign(0b1111_1100_1001_0000, Resolution::Bits12),
+                   (0b0000_0011_0111_0000, -55.0),
+        );
+
+        assert_eq!(verify_sign(0b1111_1110_1101_0111, Resolution::Bits12),
+                   (0b0000_0001_0010_1001, -18.5625),
+        );
+    }
+
+    #[test]
+    fn zero_value() {
+        assert_eq!(verify_sign(0b0, Resolution::Bits12),
+                   (0b0, 0.0),
+        );
+    }
+
+    #[test]
+    fn positive_value() {
+        assert_eq!(verify_sign(0b0000_0000_0000_1000, Resolution::Bits12),
+                   (0b0000_0000_0000_1000, 0.5),
+        );
+
+        assert_eq!(verify_sign(0b0000_0001_0010_1000, Resolution::Bits12),
+                   (0b0000_0001_0010_1000, 18.5),
+        );
+
+        assert_eq!(verify_sign(0b0000_0001_1001_0001, Resolution::Bits12),
+                   (0b0000_0001_1001_0001, 25.0625),
+        );
+
+        assert_eq!(verify_sign(0b0000_0111_1101_0000, Resolution::Bits12),
+                   (0b0000_0111_1101_0000, 125.0),
+        );
+    }
 }
