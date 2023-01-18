@@ -204,9 +204,8 @@ where
         return Err(OneWireError::CrcMismatch);
     };
 
-    let (raw_temp, temperature): (u16, f32) = verify_sign(
-        u16::from_le_bytes([scratchpad[0], scratchpad[1]]),
-        resolution,
+    let (raw_temp, temperature): (u16, f32) = verify_sign(u16::from_le_bytes([scratchpad[0], scratchpad[1]]),
+                                                          resolution,
     );
     
     Ok(SensorData {
@@ -258,7 +257,6 @@ where
 //
 fn verify_sign(raw_temp: u16,
                resolution: Resolution) -> (u16, f32) {
-
     let (sign, raw_temp): (f32, u16) = if (raw_temp & 0x8000).eq(&0x8000) {
         (-1.0, (raw_temp ^ 0xFFFF) + 1)
     } else {
