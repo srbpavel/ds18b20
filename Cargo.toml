@@ -14,9 +14,9 @@ A Rust DS18B20 temperature sensor driver for [embedded-hal](https://github.com/r
 """
 
 [dependencies]
-#one-wire-bus = "0.1.1"
+one-wire-bus = "0.1.1"
 ## my fork
 #one-wire-bus = { path = "/home/conan/git/srbpavel/one_wire_bus", version = "0.2.0" }
-one-wire-bus = { git = "https://github.com/srbpavel/one_wire_bus", version = "0.2.0" }
+#one-wire-bus = { git = "https://github.com/srbpavel/one_wire_bus", version = "0.2.0" }
 
 embedded-hal = {version="0.2.3", features=["unproven"]}
